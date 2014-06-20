@@ -38,23 +38,27 @@ def chain_iterative(seq, *args):
 class Chainable:
     def __init__(self, obj, *scopes, **kwargs):
         self.base = obj
-        self.scopes = scopes
-        self.original_scopes = kwargs.get('original_scopes', scopes)
+        if scopes:
+            self.scopes = scopes
+        else:
+            import inspect
+            fr = inspect.currentframe()
+            globals_ = fr.f_back.f_globals
+            locals_ = fr.f_back.f_locals
+            self.scopes = [__builtins__, globals_, locals_]
+        self.original_scopes = kwargs.get('original_scopes', self.scopes)
 
     def __getattr__(self, name):
         # look for 'name' in scopes
         new_scope = None
-        for s in self.scopes:
+        for s in reversed(self.scopes):
             if hasattr(s, '__getitem__'):
                 try:
                     new_scope = s[name]
                 except KeyError:
                     pass
             else:
-                try:
-                    new_scope = getattr(s, name, None)
-                except:
-                    pass
+                new_scope = getattr(s, name, None)
 
             if new_scope:
                 break
@@ -114,21 +118,21 @@ def _main():
         set)
 
     # 6. Javascript style OOP with dynamic methods
-    print Chainable(users, __builtins__) \
-        .filter(lambda x: x.is_active) \
-        .map(lambda x: x.email.split('@')[-1]) \
-        .set() \
-        .base
+    print(Chainable(users)
+        .filter(lambda x: x.is_active)
+        .map(lambda x: x.email.split('@')[-1])
+        .set()
+        .base)
 
     class A:
         def derp(self, x): return map(lambda x: x.email.split('@')[-1], x)
     a = A()
 
-    print Chainable(users, __builtins__, locals()) \
-        .filter(lambda x: x.is_active) \
-        .a.derp() \
-        .set() \
-        .base
+    print(Chainable(users)
+        .filter(lambda x: x.is_active)
+        .a.derp()
+        .set()
+        .base)
 
 
 if __name__ == '__main__':
