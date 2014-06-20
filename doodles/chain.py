@@ -35,22 +35,43 @@ def chain_iterative(seq, *args):
     return seq
 
 
-def _make_chainable_method(fun, base):
-    def f(*args, **kwargs):
-        fargs = args + (base,)
-        return Chainable(fun(*fargs, **kwargs))
-    return f
-
-
 class Chainable:
-    def __init__(self, obj):
+    def __init__(self, obj, *scopes, **kwargs):
         self.base = obj
+        self.scopes = scopes
+        self.original_scopes = kwargs.get('original_scopes', scopes)
 
     def __getattr__(self, name):
-        f = eval(name)
-        if not hasattr(f, '__call__'):
+        # look for 'name' in scopes
+        new_scope = None
+        for s in self.scopes:
+            if hasattr(s, '__getitem__'):
+                try:
+                    new_scope = s[name]
+                except KeyError:
+                    pass
+            else:
+                try:
+                    new_scope = getattr(s, name, None)
+                except:
+                    pass
+
+            if new_scope:
+                break
+
+        if not new_scope:
+            new_scope = getattr(self.base, name, None)
+
+        if not new_scope:
             raise AttributeError
-        return _make_chainable_method(f, self.base)
+
+        return Chainable(self.base, new_scope,
+                         original_scopes=self.original_scopes)
+
+    def __call__(self, *args):
+        fargs = args + (self.base,)
+        rv = self.scopes[0](*fargs)
+        return Chainable(rv, *(self.original_scopes or self.scope))
 
 
 def _main():
@@ -93,11 +114,22 @@ def _main():
         set)
 
     # 6. Javascript style OOP with dynamic methods
-    print Chainable(users) \
+    print Chainable(users, __builtins__) \
         .filter(lambda x: x.is_active) \
         .map(lambda x: x.email.split('@')[-1]) \
         .set() \
         .base
+
+    class A:
+        def derp(self, x): return map(lambda x: x.email.split('@')[-1], x)
+    a = A()
+
+    print Chainable(users, __builtins__, locals()) \
+        .filter(lambda x: x.is_active) \
+        .a.derp() \
+        .set() \
+        .base
+
 
 if __name__ == '__main__':
     _main()
